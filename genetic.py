@@ -36,10 +36,10 @@ class GeneticSolver:
     def __init__(
         self,
         maze: Maze,
-        population_size: int = 40,
-        chromosome_length: int = 40,
+        population_size: int = 5,
+        chromosome_length: int = 20,
         max_generations: int = 200,
-        crossover_rate: float = 0.9,
+        crossover_rate: float = 0.5,
         mutation_rate: float = 0.05,
         tournament_size: int = 3,
     ):
