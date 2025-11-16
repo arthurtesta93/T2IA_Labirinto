@@ -3,6 +3,7 @@
 # Implementação de um Algoritmo Genético para encontrar a saída do labirinto.
 
 from __future__ import annotations
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import List, Tuple
 import random
@@ -23,6 +24,11 @@ MOVES = {
     8: (-1, -1),  # cima-esquerda
 }
 GENE_VALUES = list(MOVES.keys())
+
+EXPLORATION_STEP_BONUS = 0.5      # ganho por célula inédita visitada
+EXPLORATION_MAX_BONUS = 15.0
+STRAIGHT_STEP_BONUS = 0.4         # ganho por manter direção após o primeiro passo
+STRAIGHT_MAX_BONUS = 10.0
 
 @dataclass
 class IndividualInfo:
@@ -61,24 +67,46 @@ class GeneticSolver:
         r, c = self.maze.start
         exit_r, exit_c = self.maze.exit
         path = [(r, c)]
+        visit_counts = defaultdict(int)
+        visit_counts[self.maze.start] = 1
+
         collisions = 0
+        collision_streak = 0
+        collision_penalty = 0.0
         reached_exit = False
+        visited_cells = {self.maze.start}
+        last_direction: Tuple[int, int] | None = None
+        straight_bonus = 0.0
 
         for gene in chromosome:
+            gamma = 0.5
             dr, dc = MOVES[gene]
             nr, nc = r + dr, c + dc
             if not self.maze.is_free(nr, nc):
                 collisions += 1
                 # bateu na parede -> fica parado
+                collision_streak += 1
+                collision_penalty += 1.0 / (collision_streak * collision_streak)
                 continue
+            collision_streak = 0
             r, c = nr, nc
+            visit_counts[(r, c)] += 1
             path.append((r, c))
+            visited_cells.add((r, c))
+
+            current_direction = (dr, dc)
+            if current_direction == last_direction:
+                straight_bonus += STRAIGHT_STEP_BONUS
+            else:
+                last_direction = current_direction
+
             if (r, c) == (exit_r, exit_c):
                 reached_exit = True
                 break
 
         # ----------------- NOVO CÁLCULO DA APTIDÃO (0..99) -----------------
         # distância Manhattan até a saída
+        
         dist_exit = abs(r - exit_r) + abs(c - exit_c)
         path_len = len(path) - 1  # número de passos
 
@@ -96,6 +124,15 @@ class GeneticSolver:
         # Bônus por chegar na saída
         if reached_exit:
             score += 20.0
+    
+        repeat_penalty = gamma * sum(count - 1 for count in visit_counts.values() if count > 1)
+        score -= repeat_penalty
+        score -= collision_penalty
+
+        # Bônus incremental por explorar novas células e manter direções retas
+        exploration_bonus = min(len(visited_cells) * EXPLORATION_STEP_BONUS, EXPLORATION_MAX_BONUS)
+        score += exploration_bonus
+        score += min(straight_bonus, STRAIGHT_MAX_BONUS)
 
         # Garante que fique entre 0 e 99
         if score < 0.0:
