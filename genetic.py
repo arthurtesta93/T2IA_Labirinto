@@ -25,10 +25,28 @@ MOVES = {
 }
 GENE_VALUES = list(MOVES.keys())
 
-EXPLORATION_STEP_BONUS = 0.5      # ganho por célula inédita visitada
-EXPLORATION_MAX_BONUS = 15.0
-STRAIGHT_STEP_BONUS = 0.4         # ganho por manter direção após o primeiro passo
-STRAIGHT_MAX_BONUS = 10.0
+DIST_SCORE_CAP = 20.0
+DISTANCE_PENALTY = 2.0
+COLLISION_SCORE_CAP = 20.0
+COLLISION_PENALTY = 4.0
+LENGTH_SCORE_CAP = 20.0
+LENGTH_PENALTY = 0.5
+
+EXPLORATION_STEP_BONUS = 0.7      # ganho por célula inédita visitada
+EXPLORATION_MAX_BONUS = 25.0
+STRAIGHT_STEP_BONUS = 0.5         # ganho por manter direção após o primeiro passo
+STRAIGHT_MAX_BONUS = 15.0
+
+PROGRESS_STEP_REWARD = 0.6
+PROGRESS_MAX_BONUS = 15.0
+REVISIT_PENALTY = 0.7
+COLLISION_STREAK_PENALTY = 1.5
+
+SUCCESS_BONUS = 40.0
+SUCCESS_MULTIPLIER = 1.3
+TRIM_BONUS_PER_GENE = 0.8
+
+MAX_FITNESS = 120.0
 
 @dataclass
 class IndividualInfo:
@@ -77,22 +95,27 @@ class GeneticSolver:
         visited_cells = {self.maze.start}
         last_direction: Tuple[int, int] | None = None
         straight_bonus = 0.0
+        progress_bonus = 0.0
+        prev_dist = abs(r - exit_r) + abs(c - exit_c)
 
         for gene in chromosome:
-            gamma = 0.5
             dr, dc = MOVES[gene]
             nr, nc = r + dr, c + dc
             if not self.maze.is_free(nr, nc):
                 collisions += 1
                 # bateu na parede -> fica parado
                 collision_streak += 1
-                collision_penalty += 1.0 / (collision_streak * collision_streak)
+                collision_penalty += COLLISION_STREAK_PENALTY * collision_streak
                 continue
             collision_streak = 0
             r, c = nr, nc
             visit_counts[(r, c)] += 1
             path.append((r, c))
             visited_cells.add((r, c))
+            current_dist = abs(r - exit_r) + abs(c - exit_c)
+            if current_dist < prev_dist:
+                progress_bonus += PROGRESS_STEP_REWARD * (prev_dist - current_dist)
+            prev_dist = current_dist
 
             current_direction = (dr, dc)
             if current_direction == last_direction:
@@ -104,28 +127,32 @@ class GeneticSolver:
                 reached_exit = True
                 break
 
-        # ----------------- NOVO CÁLCULO DA APTIDÃO (0..99) -----------------
+        # ----------------- NOVO CÁLCULO DA APTIDÃO -----------------
         # distância Manhattan até a saída
-        
         dist_exit = abs(r - exit_r) + abs(c - exit_c)
         path_len = len(path) - 1  # número de passos
 
         score = 0.0
 
         # Quanto mais perto da saída, melhor (até 30 pontos)
-        score += max(0.0, 30.0 - 3.0 * dist_exit)
+        score += max(0.0, DIST_SCORE_CAP - DISTANCE_PENALTY * dist_exit)
 
         # Quanto menos colisões, melhor (até 30 pontos)
-        score += max(0.0, 30.0 - 5.0 * collisions)
+        score += max(0.0, COLLISION_SCORE_CAP - COLLISION_PENALTY * collisions)
 
         # Caminhos muito longos perdem pontos (até 30 pontos)
-        score += max(0.0, 30.0 - 1.0 * path_len)
+        score += max(0.0, LENGTH_SCORE_CAP - LENGTH_PENALTY * path_len)
+
+        # Ganho incremental por reduzir distância passo a passo
+        score += min(progress_bonus, PROGRESS_MAX_BONUS)
 
         # Bônus por chegar na saída
         if reached_exit:
-            score += 20.0
-    
-        repeat_penalty = gamma * sum(count - 1 for count in visit_counts.values() if count > 1)
+            trimmed_genes = max(0, self.chromosome_length - path_len)
+            score += SUCCESS_BONUS
+            score += trimmed_genes * TRIM_BONUS_PER_GENE
+        
+        repeat_penalty = REVISIT_PENALTY * sum(count - 1 for count in visit_counts.values() if count > 1)
         score -= repeat_penalty
         score -= collision_penalty
 
@@ -134,11 +161,14 @@ class GeneticSolver:
         score += exploration_bonus
         score += min(straight_bonus, STRAIGHT_MAX_BONUS)
 
-        # Garante que fique entre 0 e 99
+        if reached_exit:
+            score *= SUCCESS_MULTIPLIER
+
+        # Garante que fique dentro dos limites definidos
         if score < 0.0:
             score = 0.0
-        elif score > 99.0:
-            score = 99.0
+        elif score > MAX_FITNESS:
+            score = MAX_FITNESS
 
         fitness = score
         # -------------------------------------------------------------------
