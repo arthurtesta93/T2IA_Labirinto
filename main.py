@@ -66,29 +66,11 @@ def main(argv=None):
     # ----------------- ALGORITMO GENÉTICO -----------------
     print("\n=== ALGORITMO GENÉTICO ===\n")
 
-    max_tentativas = 10
-    ga_path: List[Tuple[int, int]] | None = None
+    chrom, ga_path, found_exit = solver.run(detailed=detailed, print_interval=10)
 
-    for tentativa in range(1, max_tentativas + 1):
-        print(f"\n--- Tentativa {tentativa} do GA ---\n")
-        chrom, tentativa_path, found_exit = solver.run(
-            detailed=detailed, print_interval=10
-        )
-
-        # Critério REAL de sucesso: caminho termina exatamente na célula S
-        if tentativa_path and tentativa_path[-1] == maze.exit:
-            ga_path = tentativa_path
-            print(f"\nSaída S encontrada na tentativa {tentativa}.\n")
-            break
-        else:
-            print("GA não chegou em S nesta tentativa.\n")
-
-    # Se mesmo depois de várias tentativas não chegou em S, aborta
-    if not ga_path or ga_path[-1] != maze.exit:
-        print(
-            f"\nMesmo após {max_tentativas} tentativas o Algoritmo Genético "
-            "não encontrou a saída S."
-        )
+    # Se não encontrou a saída, aborta
+    if not found_exit or not ga_path or ga_path[-1] != maze.exit:
+        print("\nAlgoritmo Genético não conseguiu encontrar a saída S.")
         return 1
 
     # Aqui temos certeza que o ÚLTIMO ponto do caminho é a saída S

@@ -292,7 +292,12 @@ class GeneticSolver:
         attempt = 0
 
         while True:
+            print(f"\n--- Tentativa {attempt+1} do GA ---\n")
             attempt += 1
+            
+            if attempt > 10:
+                print("Número máximo de tentativas atingido. Abortando.")
+                return [], [], False
             # nova população aleatória a cada tentativa
             population = [self._random_chromosome() for _ in range(self.population_size)]
             best_overall: IndividualInfo | None = None
@@ -316,7 +321,9 @@ class GeneticSolver:
                         key=lambda x: x.fitness,
                     )
                     # opcional: você pode imprimir em qual tentativa/geração encontrou
-                    # print(f"Solução encontrada na tentativa {attempt}, geração {gen}")
+                    print('\n------------------------------------------------------------')
+                    print(f"Solução encontrada na tentativa {attempt}, geração {gen}")
+                    print('------------------------------------------------------------')
                     return best_with_exit.chromosome, best_with_exit.path, True
 
                 # gera próxima geração normalmente
