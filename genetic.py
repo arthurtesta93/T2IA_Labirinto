@@ -66,6 +66,8 @@ class GeneticSolver:
         crossover_rate: float = 0.5,
         mutation_rate: float = 0.05,
         tournament_size: int = 3,
+        elite_size: int | None = None,
+        elite_pool_size: int | None = None,
     ):
         self.maze = maze
         self.population_size = population_size
@@ -74,6 +76,15 @@ class GeneticSolver:
         self.crossover_rate = crossover_rate
         self.mutation_rate = mutation_rate
         self.tournament_size = tournament_size
+        self.elite_size = elite_size or max(1, population_size // 5)
+        if self.elite_size > population_size:
+            self.elite_size = population_size
+        pool_default = max(self.elite_size * 2, self.elite_size)
+        self.elite_pool_size = elite_pool_size or pool_default
+        if self.elite_pool_size < self.elite_size:
+            self.elite_pool_size = self.elite_size
+        if self.elite_pool_size > population_size:
+            self.elite_pool_size = population_size
 
     # ------------- Utilidades básicas do GA -------------
 
@@ -151,7 +162,7 @@ class GeneticSolver:
             trimmed_genes = max(0, self.chromosome_length - path_len)
             score += SUCCESS_BONUS
             score += trimmed_genes * TRIM_BONUS_PER_GENE
-        
+
         repeat_penalty = REVISIT_PENALTY * sum(count - 1 for count in visit_counts.values() if count > 1)
         score -= repeat_penalty
         score -= collision_penalty
@@ -197,13 +208,27 @@ class GeneticSolver:
 
         return infos, best_idx, exit_found
 
-    def _tournament_select(self, infos: List[IndividualInfo]) -> IndividualInfo:
-        best = None
-        for _ in range(self.tournament_size):
-            cand = random.choice(infos)
-            if best is None or cand.fitness > best.fitness:
-                best = cand
-        return best
+    # def _tournament_select(self, infos: List[IndividualInfo]) -> IndividualInfo:
+    #     best = None
+    #     for _ in range(self.tournament_size):
+    #         cand = random.choice(infos)
+    #         if best is None or cand.fitness > best.fitness:
+    #             best = cand
+    #     return best
+
+    def _next_generation(self, infos: List[IndividualInfo]) -> List[List[int]]: # sem torneio, utiliza elitismo
+        elites = sorted(infos, key=lambda inf: inf.fitness, reverse=True)
+        new_pop = [elite.chromosome[:] for elite in elites[:self.elite_size]]
+
+        while len(new_pop) < self.population_size:
+            p1, p2 = random.sample(elites[:self.elite_pool_size], 2)
+            c1, c2 = self._crossover(p1.chromosome, p2.chromosome)
+            self._mutate(c1); self._mutate(c2)
+            new_pop.append(c1)
+            if len(new_pop) < self.population_size:
+                new_pop.append(c2)
+
+        return new_pop
 
     def _crossover(self, p1: List[int], p2: List[int]):
         if random.random() > self.crossover_rate:
@@ -218,18 +243,18 @@ class GeneticSolver:
             if random.random() < self.mutation_rate:
                 chrom[i] = random.choice(GENE_VALUES)
 
-    def _next_generation(self, infos: List[IndividualInfo]) -> List[List[int]]:
-        new_pop: List[List[int]] = []
-        while len(new_pop) < self.population_size:
-            p1 = self._tournament_select(infos)
-            p2 = self._tournament_select(infos)
-            c1, c2 = self._crossover(p1.chromosome, p2.chromosome)
-            self._mutate(c1)
-            self._mutate(c2)
-            new_pop.append(c1)
-            if len(new_pop) < self.population_size:
-                new_pop.append(c2)
-        return new_pop
+    # def _next_generation(self, infos: List[IndividualInfo]) -> List[List[int]]:
+    #     new_pop: List[List[int]] = []
+    #     while len(new_pop) < self.population_size:
+    #         p1 = self._tournament_select(infos)
+    #         p2 = self._tournament_select(infos)
+    #         c1, c2 = self._crossover(p1.chromosome, p2.chromosome)
+    #         self._mutate(c1)
+    #         self._mutate(c2)
+    #         new_pop.append(c1)
+    #         if len(new_pop) < self.population_size:
+    #             new_pop.append(c2)
+    #     return new_pop
 
     # ------------- Impressão -------------
 
